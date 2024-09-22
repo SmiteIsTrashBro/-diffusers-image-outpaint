@@ -135,6 +135,13 @@ css = """
 
 title = """<h1 align="center">Diffusers Image Outpaint</h1>
 <div align="center">Drop an image you would like to extend, pick your expected ratio and hit Generate.</div>
+<div style="display: flex; justify-content: center; align-items: center; text-align: center;">
+    <p style="display: flex;gap: 6px;">
+         <a href="https://huggingface.co/spaces/fffiloni/diffusers-image-outpout?duplicate=true">
+            <img src="https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-md.svg" alt="Duplicate this Space">
+        </a> to skip the queue and enjoy faster inference on the GPU of your choice 
+    </p>
+</div>
 """
 
 with gr.Blocks(css=css) as demo:
