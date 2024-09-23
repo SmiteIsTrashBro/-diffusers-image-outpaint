@@ -53,7 +53,7 @@ def can_expand(source_width, source_height, target_width, target_height, alignme
     return True
 
 
-@spaces.GPU(duration=10)
+@spaces.GPU(duration=16)
 def infer(image, width, height, overlap_width, num_inference_steps, prompt_input=None, alignment="Middle"):
 
     source = image
