@@ -159,7 +159,7 @@ def clear_result():
     return gr.update(value=None)
 
 
-def preload_presets(target_ratio):
+def preload_presets(target_ratio, ui_width, ui_height):
     """Updates the width and height sliders based on the selected aspect ratio."""
     if target_ratio == "9:16":
         changed_width = 720
@@ -170,7 +170,7 @@ def preload_presets(target_ratio):
         changed_height = 720
         return changed_width, changed_height, gr.update(open=False)
     elif target_ratio == "Custom":
-        return 720, 1280, gr.update(open=True)
+        return ui_width, ui_height, gr.update(open=True)
 
 def select_the_right_preset(user_width, user_height):
     if user_width == 720 and user_height == 1280:
@@ -285,7 +285,7 @@ with gr.Blocks(css=css) as demo:
     
     target_ratio.change(
         fn=preload_presets,
-        inputs=[target_ratio],
+        inputs=[target_ratio, width_slider, height_slider],
         outputs=[width_slider, height_slider, settings_panel],
         queue=False
     )
@@ -297,6 +297,13 @@ with gr.Blocks(css=css) as demo:
         queue = False
     )
 
+    height_slider.change(
+        fn = select_the_right_preset,
+        inputs = [width_slider, height_slider],
+        outputs = [target_ratio],
+        queue = False
+    )
+    
     run_button.click(
         fn=clear_result,
         inputs=None,
