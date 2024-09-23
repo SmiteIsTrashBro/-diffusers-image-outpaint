@@ -172,6 +172,13 @@ def preload_presets(target_ratio):
     elif target_ratio == "Custom":
         return 720, 1280, gr.update(open=True)
 
+def select_the_right_preset(user_width, user_height):
+    if user_width == 720 and user_height == 1280:
+        return "9:16"
+    elif user_width == 1280 and user_height == 720:
+        return "16:9"
+    else:
+        return "Custom"
 
 css = """
 .gradio-container {
@@ -281,6 +288,13 @@ with gr.Blocks(css=css) as demo:
         inputs=[target_ratio],
         outputs=[width_slider, height_slider, settings_panel],
         queue=False
+    )
+
+    width_slider.change(
+        fn = select_the_right_preset,
+        inputs = [width_slider, height_slider],
+        outputs = [target_ratio],
+        queue = False
     )
 
     run_button.click(
