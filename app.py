@@ -52,10 +52,8 @@ def can_expand(source_width, source_height, target_width, target_height, alignme
         return False
     return True
 
-
-@spaces.GPU(duration=16)
-def infer(image, width, height, overlap_width, num_inference_steps, prompt_input=None, alignment="Middle"):
-
+@spaces.GPU(duration=24)
+def infer(image, width, height, overlap_width, num_inference_steps, resize_option, custom_resize_size, prompt_input=None, alignment="Middle"):
     source = image
     target_size = (width, height)
     overlap = overlap_width
@@ -72,6 +70,22 @@ def infer(image, width, height, overlap_width, num_inference_steps, prompt_input
         new_width = int(source.width * scale_factor)
         new_height = int(source.height * scale_factor)
         source = source.resize((new_width, new_height), Image.LANCZOS)
+    
+    if resize_option == "Full":
+        resize_size = max(source.width, source.height)
+    elif resize_option == "1/2":
+        resize_size = max(source.width, source.height) // 2
+    elif resize_option == "1/3":
+        resize_size = max(source.width, source.height) // 3
+    elif resize_option == "1/4":
+        resize_size = max(source.width, source.height) // 4
+    else:  # Custom
+        resize_size = custom_resize_size
+
+    aspect_ratio = source.height / source.width
+    new_width = resize_size
+    new_height = int(resize_size * aspect_ratio)
+    source = source.resize((new_width, new_height), Image.LANCZOS)
 
     if not can_expand(source.width, source.height, target_size[0], target_size[1], alignment):
         alignment = "Middle"
@@ -153,11 +167,9 @@ def infer(image, width, height, overlap_width, num_inference_steps, prompt_input
 
     yield background, cnet_image
 
-
 def clear_result():
     """Clears the result ImageSlider."""
     return gr.update(value=None)
-
 
 def preload_presets(target_ratio, ui_width, ui_height):
     """Updates the width and height sliders based on the selected aspect ratio."""
@@ -169,6 +181,10 @@ def preload_presets(target_ratio, ui_width, ui_height):
         changed_width = 1280
         changed_height = 720
         return changed_width, changed_height, gr.update(open=False)
+    elif target_ratio == "1:1":
+        changed_width = 1024
+        changed_height = 1024
+        return changed_width, changed_height, gr.update(open=False)
     elif target_ratio == "Custom":
         return ui_width, ui_height, gr.update(open=True)
 
@@ -177,8 +193,13 @@ def select_the_right_preset(user_width, user_height):
         return "9:16"
     elif user_width == 1280 and user_height == 720:
         return "16:9"
+    elif user_width == 1024 and user_height == 1024:
+        return "1:1"
     else:
         return "Custom"
+
+def toggle_custom_resize_slider(resize_option):
+    return gr.update(visible=(resize_option == "Custom"))
 
 css = """
 .gradio-container {
@@ -218,7 +239,7 @@ with gr.Blocks(css=css) as demo:
                 with gr.Row():
                     target_ratio = gr.Radio(
                         label="Expected Ratio",
-                        choices=["9:16", "16:9", "Custom"],
+                        choices=["9:16", "16:9", "1:1", "Custom"],
                         value="9:16",
                         scale=2
                     )
@@ -254,6 +275,20 @@ with gr.Blocks(css=css) as demo:
                                 maximum=50,
                                 value=42,
                                 step=1
+                            )
+                        with gr.Row():
+                            resize_option = gr.Radio(
+                                label="Resize input image",
+                                choices=["Full", "1/2", "1/3", "1/4", "Custom"],
+                                value="Full"
+                            )
+                            custom_resize_size = gr.Slider(
+                                label="Custom resize size",
+                                minimum=64,
+                                maximum=1024,
+                                step=8,
+                                value=512,
+                                visible=False
                             )
                             
                 gr.Examples(
@@ -291,17 +326,24 @@ with gr.Blocks(css=css) as demo:
     )
 
     width_slider.change(
-        fn = select_the_right_preset,
-        inputs = [width_slider, height_slider],
-        outputs = [target_ratio],
-        queue = False
+        fn=select_the_right_preset,
+        inputs=[width_slider, height_slider],
+        outputs=[target_ratio],
+        queue=False
     )
 
     height_slider.change(
-        fn = select_the_right_preset,
-        inputs = [width_slider, height_slider],
-        outputs = [target_ratio],
-        queue = False
+        fn=select_the_right_preset,
+        inputs=[width_slider, height_slider],
+        outputs=[target_ratio],
+        queue=False
+    )
+
+    resize_option.change(
+        fn=toggle_custom_resize_slider,
+        inputs=[resize_option],
+        outputs=[custom_resize_size],
+        queue=False
     )
     
     run_button.click(
@@ -311,7 +353,7 @@ with gr.Blocks(css=css) as demo:
     ).then(
         fn=infer,
         inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
-                prompt_input, alignment_dropdown],
+                resize_option, custom_resize_size, prompt_input, alignment_dropdown],
         outputs=result,
     ).then(
         fn=lambda: gr.update(visible=True),
@@ -326,7 +368,7 @@ with gr.Blocks(css=css) as demo:
     ).then(
         fn=infer,
         inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
-                prompt_input, alignment_dropdown],
+                resize_option, custom_resize_size, prompt_input, alignment_dropdown],
         outputs=result,
     ).then(
         fn=lambda: gr.update(visible=True),
