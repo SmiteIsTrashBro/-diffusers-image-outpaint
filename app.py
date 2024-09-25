@@ -201,12 +201,18 @@ def select_the_right_preset(user_width, user_height):
 def toggle_custom_resize_slider(resize_option):
     return gr.update(visible=(resize_option == "Custom"))
 
+def update_history(new_image, history):
+    """Updates the history gallery with the new image."""
+    if history is None:
+        history = []
+    history.insert(0, new_image)
+    return history
+
 css = """
 .gradio-container {
     width: 1200px !important;
 }
 """
-
 
 title = """<h1 align="center">Diffusers Image Outpaint</h1>
 <div align="center">Drop an image you would like to extend, pick your expected ratio and hit Generate.</div>
@@ -308,6 +314,8 @@ with gr.Blocks(css=css) as demo:
                 )
                 use_as_input_button = gr.Button("Use as Input Image", visible=False)
 
+        history_gallery = gr.Gallery(label="History", columns=6, object_fit="contain")
+
     def use_output_as_input(output_image):
         """Sets the generated output as the new input image."""
         return gr.update(value=output_image[1])
@@ -346,35 +354,42 @@ with gr.Blocks(css=css) as demo:
         queue=False
     )
     
-    run_button.click(
+    run_button.click(  # Clear the result
         fn=clear_result,
         inputs=None,
         outputs=result,
-    ).then(
+    ).then(  # Generate the new image
         fn=infer,
         inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
                 resize_option, custom_resize_size, prompt_input, alignment_dropdown],
         outputs=result,
-    ).then(
+    ).then(  # Update the history gallery
+        fn=lambda x, history: update_history(x[1], history),
+        inputs=[result, history_gallery],
+        outputs=history_gallery,
+    ).then(  # Show the "Use as Input Image" button
         fn=lambda: gr.update(visible=True),
         inputs=None,
         outputs=use_as_input_button,
     )
 
-    prompt_input.submit(
+    prompt_input.submit(  # Clear the result
         fn=clear_result,
         inputs=None,
         outputs=result,
-    ).then(
+    ).then(  # Generate the new image
         fn=infer,
         inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
                 resize_option, custom_resize_size, prompt_input, alignment_dropdown],
         outputs=result,
-    ).then(
+    ).then(  # Update the history gallery
+        fn=lambda x, history: update_history(x[1], history),
+        inputs=[result, history_gallery],
+        outputs=history_gallery,
+    ).then(  # Show the "Use as Input Image" button
         fn=lambda: gr.update(visible=True),
         inputs=None,
         outputs=use_as_input_button,
     )
-
 
 demo.queue(max_size=12).launch(share=False)
