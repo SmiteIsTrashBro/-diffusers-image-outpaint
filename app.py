@@ -314,7 +314,9 @@ with gr.Blocks(css=css) as demo:
                 )
                 use_as_input_button = gr.Button("Use as Input Image", visible=False)
 
-        history_gallery = gr.Gallery(label="History", columns=6, object_fit="contain")
+                history_gallery = gr.Gallery(label="History", columns=6, object_fit="contain", interactive=False)
+
+        
 
     def use_output_as_input(output_image):
         """Sets the generated output as the new input image."""
