@@ -58,19 +58,15 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
     target_size = (width, height)
     overlap = overlap_width
 
-    # Upscale if source is smaller than target in both dimensions
-    if source.width < target_size[0] and source.height < target_size[1]:
-        scale_factor = min(target_size[0] / source.width, target_size[1] / source.height)
-        new_width = int(source.width * scale_factor)
-        new_height = int(source.height * scale_factor)
-        source = source.resize((new_width, new_height), Image.LANCZOS)
-
-    if source.width > target_size[0] or source.height > target_size[1]:
-        scale_factor = min(target_size[0] / source.width, target_size[1] / source.height)
-        new_width = int(source.width * scale_factor)
-        new_height = int(source.height * scale_factor)
-        source = source.resize((new_width, new_height), Image.LANCZOS)
+    # Calculate the scaling factor to fit the image within the target size
+    scale_factor = min(target_size[0] / source.width, target_size[1] / source.height)
+    new_width = int(source.width * scale_factor)
+    new_height = int(source.height * scale_factor)
     
+    # Resize the source image
+    source = source.resize((new_width, new_height), Image.LANCZOS)
+
+    # Apply resize option
     if resize_option == "Full":
         resize_size = max(source.width, source.height)
     elif resize_option == "1/2":
@@ -87,29 +83,28 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
     new_height = int(resize_size * aspect_ratio)
     source = source.resize((new_width, new_height), Image.LANCZOS)
 
-    if not can_expand(source.width, source.height, target_size[0], target_size[1], alignment):
-        alignment = "Middle"
-
     # Calculate margins based on alignment
     if alignment == "Middle":
-        margin_x = (target_size[0] - source.width) // 2
-        margin_y = (target_size[1] - source.height) // 2
+        margin_x = (target_size[0] - new_width) // 2
+        margin_y = (target_size[1] - new_height) // 2
     elif alignment == "Left":
         margin_x = 0
-        margin_y = (target_size[1] - source.height) // 2
+        margin_y = (target_size[1] - new_height) // 2
     elif alignment == "Right":
-        margin_x = target_size[0] - source.width
-        margin_y = (target_size[1] - source.height) // 2
+        margin_x = target_size[0] - new_width
+        margin_y = (target_size[1] - new_height) // 2
     elif alignment == "Top":
-        margin_x = (target_size[0] - source.width) // 2
+        margin_x = (target_size[0] - new_width) // 2
         margin_y = 0
     elif alignment == "Bottom":
-        margin_x = (target_size[0] - source.width) // 2
-        margin_y = target_size[1] - source.height
+        margin_x = (target_size[0] - new_width) // 2
+        margin_y = target_size[1] - new_height
 
+    # Create a new background image and paste the resized source image
     background = Image.new('RGB', target_size, (255, 255, 255))
     background.paste(source, (margin_x, margin_y))
 
+    # Create the mask
     mask = Image.new('L', target_size, 255)
     mask_draw = ImageDraw.Draw(mask)
 
@@ -117,28 +112,31 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
     if alignment == "Middle":
         mask_draw.rectangle([
             (margin_x + overlap, margin_y + overlap),
-            (margin_x + source.width - overlap, margin_y + source.height - overlap)
+            (margin_x + new_width - overlap, margin_y + new_height - overlap)
         ], fill=0)
     elif alignment == "Left":
         mask_draw.rectangle([
             (margin_x, margin_y),
-            (margin_x + source.width - overlap, margin_y + source.height)
+            (margin_x + new_width - overlap, margin_y + new_height)
         ], fill=0)
     elif alignment == "Right":
         mask_draw.rectangle([
             (margin_x + overlap, margin_y),
-            (margin_x + source.width, margin_y + source.height)
+            (margin_x + new_width, margin_y + new_height)
         ], fill=0)
     elif alignment == "Top":
         mask_draw.rectangle([
             (margin_x, margin_y),
-            (margin_x + source.width, margin_y + source.height - overlap)
+            (margin_x + new_width, margin_y + new_height - overlap)
         ], fill=0)
     elif alignment == "Bottom":
         mask_draw.rectangle([
             (margin_x, margin_y + overlap),
-            (margin_x + source.width, margin_y + source.height)
+            (margin_x + new_width, margin_y + new_height)
         ], fill=0)
+
+    if not can_expand(source.width, source.height, target_size[0], target_size[1], alignment):
+        alignment = "Middle"
 
     cnet_image = background.copy()
     cnet_image.paste(0, (0, 0), mask)
