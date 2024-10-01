@@ -127,9 +127,9 @@ def prepare_image_and_mask(image, width, height, overlap_percentage, resize_opti
     # Calculate overlap areas
     white_gaps_patch = 2
     left_overlap = margin_x + overlap_x if overlap_left else margin_x + white_gaps_patch
-    right_overlap = margin_x + new_width - overlap_x if overlap_right else margin_x + new_width + white_gaps_patch
+    right_overlap = margin_x + new_width - overlap_x if overlap_right else margin_x + new_width - white_gaps_patch
     top_overlap = margin_y + overlap_y if overlap_top else margin_y + white_gaps_patch
-    bottom_overlap = margin_y + new_height - overlap_y if overlap_bottom else margin_y + new_height + white_gaps_patch
+    bottom_overlap = margin_y + new_height - overlap_y if overlap_bottom else margin_y + new_height - white_gaps_patch
 
     # Draw the mask
     mask_draw.rectangle([
