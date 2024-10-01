@@ -53,7 +53,7 @@ def can_expand(source_width, source_height, target_width, target_height, alignme
     return True
 
 @spaces.GPU(duration=24)
-def infer(image, width, height, overlap_width, num_inference_steps, resize_option, custom_resize_size, prompt_input=None, alignment="Middle"):
+def infer(image, width, height, overlap_width, num_inference_steps, resize_option, custom_resize_percentage, prompt_input=None, alignment="Middle"):
     source = image
     target_size = (width, height)
     overlap = overlap_width
@@ -63,24 +63,31 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
     new_width = int(source.width * scale_factor)
     new_height = int(source.height * scale_factor)
     
-    # Resize the source image
+    # Resize the source image to fit within target size
     source = source.resize((new_width, new_height), Image.LANCZOS)
 
-    # Apply resize option
+    # Apply resize option using percentages
     if resize_option == "Full":
-        resize_size = max(source.width, source.height)
-    elif resize_option == "1/2":
-        resize_size = max(source.width, source.height) // 2
-    elif resize_option == "1/3":
-        resize_size = max(source.width, source.height) // 3
-    elif resize_option == "1/4":
-        resize_size = max(source.width, source.height) // 4
+        resize_percentage = 100
+    elif resize_option == "50%":
+        resize_percentage = 50
+    elif resize_option == "33%":
+        resize_percentage = 33
+    elif resize_option == "25%":
+        resize_percentage = 25
     else:  # Custom
-        resize_size = custom_resize_size
+        resize_percentage = custom_resize_percentage
 
-    aspect_ratio = source.height / source.width
-    new_width = resize_size
-    new_height = int(resize_size * aspect_ratio)
+    # Calculate new dimensions based on percentage
+    resize_factor = resize_percentage / 100
+    new_width = int(source.width * resize_factor)
+    new_height = int(source.height * resize_factor)
+
+    # Ensure minimum size of 64 pixels
+    new_width = max(new_width, 64)
+    new_height = max(new_height, 64)
+
+    # Resize the image
     source = source.resize((new_width, new_height), Image.LANCZOS)
 
     # Calculate margins based on alignment
@@ -283,15 +290,15 @@ with gr.Blocks(css=css) as demo:
                         with gr.Row():
                             resize_option = gr.Radio(
                                 label="Resize input image",
-                                choices=["Full", "1/2", "1/3", "1/4", "Custom"],
+                                choices=["Full", "50%", "33%", "25%", "Custom"],
                                 value="Full"
                             )
-                            custom_resize_size = gr.Slider(
-                                label="Custom resize size",
-                                minimum=64,
-                                maximum=1024,
-                                step=8,
-                                value=512,
+                            custom_resize_percentage = gr.Slider(
+                                label="Custom resize percentage",
+                                minimum=1,
+                                maximum=100,
+                                step=1,
+                                value=50,
                                 visible=False
                             )
                             
@@ -350,7 +357,7 @@ with gr.Blocks(css=css) as demo:
     resize_option.change(
         fn=toggle_custom_resize_slider,
         inputs=[resize_option],
-        outputs=[custom_resize_size],
+        outputs=[custom_resize_percentage],
         queue=False
     )
     
@@ -361,7 +368,7 @@ with gr.Blocks(css=css) as demo:
     ).then(  # Generate the new image
         fn=infer,
         inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
-                resize_option, custom_resize_size, prompt_input, alignment_dropdown],
+                resize_option, custom_resize_percentage, prompt_input, alignment_dropdown],
         outputs=result,
     ).then(  # Update the history gallery
         fn=lambda x, history: update_history(x[1], history),
@@ -380,7 +387,7 @@ with gr.Blocks(css=css) as demo:
     ).then(  # Generate the new image
         fn=infer,
         inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
-                resize_option, custom_resize_size, prompt_input, alignment_dropdown],
+                resize_option, custom_resize_percentage, prompt_input, alignment_dropdown],
         outputs=result,
     ).then(  # Update the history gallery
         fn=lambda x, history: update_history(x[1], history),
