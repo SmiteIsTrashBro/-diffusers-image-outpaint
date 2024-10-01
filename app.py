@@ -52,19 +52,16 @@ def can_expand(source_width, source_height, target_width, target_height, alignme
         return False
     return True
 
-@spaces.GPU(duration=24)
-def infer(image, width, height, overlap_width, num_inference_steps, resize_option, custom_resize_percentage, prompt_input=None, alignment="Middle"):
-    source = image
+def prepare_image_and_mask(image, width, height, overlap_percentage, resize_option, custom_resize_percentage, alignment, overlap_left, overlap_right, overlap_top, overlap_bottom):
     target_size = (width, height)
-    overlap = overlap_width
 
     # Calculate the scaling factor to fit the image within the target size
-    scale_factor = min(target_size[0] / source.width, target_size[1] / source.height)
-    new_width = int(source.width * scale_factor)
-    new_height = int(source.height * scale_factor)
+    scale_factor = min(target_size[0] / image.width, target_size[1] / image.height)
+    new_width = int(image.width * scale_factor)
+    new_height = int(image.height * scale_factor)
     
     # Resize the source image to fit within target size
-    source = source.resize((new_width, new_height), Image.LANCZOS)
+    source = image.resize((new_width, new_height), Image.LANCZOS)
 
     # Apply resize option using percentages
     if resize_option == "Full":
@@ -90,6 +87,14 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
     # Resize the image
     source = source.resize((new_width, new_height), Image.LANCZOS)
 
+    # Calculate the overlap in pixels based on the percentage
+    overlap_x = int(new_width * (overlap_percentage / 100))
+    overlap_y = int(new_height * (overlap_percentage / 100))
+
+    # Ensure minimum overlap of 1 pixel
+    overlap_x = max(overlap_x, 1)
+    overlap_y = max(overlap_y, 1)
+
     # Calculate margins based on alignment
     if alignment == "Middle":
         margin_x = (target_size[0] - new_width) // 2
@@ -107,6 +112,10 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
         margin_x = (target_size[0] - new_width) // 2
         margin_y = target_size[1] - new_height
 
+    # Adjust margins to eliminate gaps
+    margin_x = max(0, min(margin_x, target_size[0] - new_width))
+    margin_y = max(0, min(margin_y, target_size[1] - new_height))
+
     # Create a new background image and paste the resized source image
     background = Image.new('RGB', target_size, (255, 255, 255))
     background.paste(source, (margin_x, margin_y))
@@ -115,34 +124,43 @@ def infer(image, width, height, overlap_width, num_inference_steps, resize_optio
     mask = Image.new('L', target_size, 255)
     mask_draw = ImageDraw.Draw(mask)
 
-    # Adjust mask generation based on alignment
-    if alignment == "Middle":
-        mask_draw.rectangle([
-            (margin_x + overlap, margin_y + overlap),
-            (margin_x + new_width - overlap, margin_y + new_height - overlap)
-        ], fill=0)
-    elif alignment == "Left":
-        mask_draw.rectangle([
-            (margin_x, margin_y),
-            (margin_x + new_width - overlap, margin_y + new_height)
-        ], fill=0)
-    elif alignment == "Right":
-        mask_draw.rectangle([
-            (margin_x + overlap, margin_y),
-            (margin_x + new_width, margin_y + new_height)
-        ], fill=0)
-    elif alignment == "Top":
-        mask_draw.rectangle([
-            (margin_x, margin_y),
-            (margin_x + new_width, margin_y + new_height - overlap)
-        ], fill=0)
-    elif alignment == "Bottom":
-        mask_draw.rectangle([
-            (margin_x, margin_y + overlap),
-            (margin_x + new_width, margin_y + new_height)
-        ], fill=0)
+    # Calculate overlap areas
+    left_overlap = margin_x + overlap_x if overlap_left else margin_x
+    right_overlap = margin_x + new_width - overlap_x if overlap_right else margin_x + new_width
+    top_overlap = margin_y + overlap_y if overlap_top else margin_y
+    bottom_overlap = margin_y + new_height - overlap_y if overlap_bottom else margin_y + new_height
 
-    if not can_expand(source.width, source.height, target_size[0], target_size[1], alignment):
+    # Draw the mask
+    mask_draw.rectangle([
+        (left_overlap, top_overlap),
+        (right_overlap, bottom_overlap)
+    ], fill=0)
+
+    return background, mask
+
+def preview_image_and_mask(image, width, height, overlap_percentage, resize_option, custom_resize_percentage, alignment, overlap_left, overlap_right, overlap_top, overlap_bottom):
+    background, mask = prepare_image_and_mask(image, width, height, overlap_percentage, resize_option, custom_resize_percentage, alignment, overlap_left, overlap_right, overlap_top, overlap_bottom)
+    
+    # Create a preview image showing the mask
+    preview = background.copy().convert('RGBA')
+    
+    # Create a semi-transparent red overlay
+    red_overlay = Image.new('RGBA', background.size, (255, 0, 0, 64))  # Reduced alpha to 64 (25% opacity)
+    
+    # Convert black pixels in the mask to semi-transparent red
+    red_mask = Image.new('RGBA', background.size, (0, 0, 0, 0))
+    red_mask.paste(red_overlay, (0, 0), mask)
+    
+    # Overlay the red mask on the background
+    preview = Image.alpha_composite(preview, red_mask)
+    
+    return preview
+
+@spaces.GPU(duration=24)
+def infer(image, width, height, overlap_percentage, num_inference_steps, resize_option, custom_resize_percentage, prompt_input, alignment, overlap_left, overlap_right, overlap_top, overlap_bottom):
+    background, mask = prepare_image_and_mask(image, width, height, overlap_percentage, resize_option, custom_resize_percentage, alignment, overlap_left, overlap_right, overlap_top, overlap_bottom)
+    
+    if not can_expand(background.width, background.height, width, height, alignment):
         alignment = "Middle"
 
     cnet_image = background.copy()
@@ -181,15 +199,15 @@ def preload_presets(target_ratio, ui_width, ui_height):
     if target_ratio == "9:16":
         changed_width = 720
         changed_height = 1280
-        return changed_width, changed_height, gr.update(open=False)
+        return changed_width, changed_height, gr.update()
     elif target_ratio == "16:9":
         changed_width = 1280
         changed_height = 720
-        return changed_width, changed_height, gr.update(open=False)
+        return changed_width, changed_height, gr.update()
     elif target_ratio == "1:1":
         changed_width = 1024
         changed_height = 1024
-        return changed_width, changed_height, gr.update(open=False)
+        return changed_width, changed_height, gr.update()
     elif target_ratio == "Custom":
         return ui_width, ui_height, gr.update(open=True)
 
@@ -265,28 +283,35 @@ with gr.Blocks(css=css) as demo:
                     with gr.Column():
                         with gr.Row():
                             width_slider = gr.Slider(
-                                label="Width",
+                                label="Target Width",
                                 minimum=720,
                                 maximum=1536,
                                 step=8,
                                 value=720,  # Set a default value
                             )
                             height_slider = gr.Slider(
-                                label="Height",
+                                label="Target Height",
                                 minimum=720,
                                 maximum=1536,
                                 step=8,
                                 value=1280,  # Set a default value
                             )
-                        with gr.Row():
-                            num_inference_steps = gr.Slider(label="Steps", minimum=4, maximum=12, step=1, value=8)
-                            overlap_width = gr.Slider(
-                                label="Mask overlap width",
+                        
+                        num_inference_steps = gr.Slider(label="Steps", minimum=4, maximum=12, step=1, value=8)
+                        with gr.Group():
+                            overlap_percentage = gr.Slider(
+                                label="Mask overlap (%)",
                                 minimum=1,
                                 maximum=50,
-                                value=42,
+                                value=10,
                                 step=1
                             )
+                            with gr.Row():
+                                overlap_top = gr.Checkbox(label="Overlap Top", value=True)
+                                overlap_right = gr.Checkbox(label="Overlap Right", value=True)
+                            with gr.Row():
+                                overlap_left = gr.Checkbox(label="Overlap Left", value=True)
+                                overlap_bottom = gr.Checkbox(label="Overlap Bottom", value=True)
                         with gr.Row():
                             resize_option = gr.Radio(
                                 label="Resize input image",
@@ -294,13 +319,17 @@ with gr.Blocks(css=css) as demo:
                                 value="Full"
                             )
                             custom_resize_percentage = gr.Slider(
-                                label="Custom resize percentage",
+                                label="Custom resize (%)",
                                 minimum=1,
                                 maximum=100,
                                 step=1,
                                 value=50,
                                 visible=False
                             )
+                        
+                        with gr.Column():
+                            preview_button = gr.Button("Preview alignment and mask")
+                            
                             
                 gr.Examples(
                     examples=[
@@ -312,6 +341,8 @@ with gr.Blocks(css=css) as demo:
                     inputs=[input_image, width_slider, height_slider, alignment_dropdown],
                 )
 
+                
+
             with gr.Column():
                 result = ImageSlider(
                     interactive=False,
@@ -320,6 +351,7 @@ with gr.Blocks(css=css) as demo:
                 use_as_input_button = gr.Button("Use as Input Image", visible=False)
 
                 history_gallery = gr.Gallery(label="History", columns=6, object_fit="contain", interactive=False)
+                preview_image = gr.Image(label="Preview")
 
         
 
@@ -367,8 +399,9 @@ with gr.Blocks(css=css) as demo:
         outputs=result,
     ).then(  # Generate the new image
         fn=infer,
-        inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
-                resize_option, custom_resize_percentage, prompt_input, alignment_dropdown],
+        inputs=[input_image, width_slider, height_slider, overlap_percentage, num_inference_steps,
+                resize_option, custom_resize_percentage, prompt_input, alignment_dropdown,
+                overlap_left, overlap_right, overlap_top, overlap_bottom],
         outputs=result,
     ).then(  # Update the history gallery
         fn=lambda x, history: update_history(x[1], history),
@@ -386,8 +419,9 @@ with gr.Blocks(css=css) as demo:
         outputs=result,
     ).then(  # Generate the new image
         fn=infer,
-        inputs=[input_image, width_slider, height_slider, overlap_width, num_inference_steps,
-                resize_option, custom_resize_percentage, prompt_input, alignment_dropdown],
+        inputs=[input_image, width_slider, height_slider, overlap_percentage, num_inference_steps,
+                resize_option, custom_resize_percentage, prompt_input, alignment_dropdown,
+                overlap_left, overlap_right, overlap_top, overlap_bottom],
         outputs=result,
     ).then(  # Update the history gallery
         fn=lambda x, history: update_history(x[1], history),
@@ -397,6 +431,14 @@ with gr.Blocks(css=css) as demo:
         fn=lambda: gr.update(visible=True),
         inputs=None,
         outputs=use_as_input_button,
+    )
+
+    preview_button.click(
+        fn=preview_image_and_mask,
+        inputs=[input_image, width_slider, height_slider, overlap_percentage, resize_option, custom_resize_percentage, alignment_dropdown,
+                overlap_left, overlap_right, overlap_top, overlap_bottom],
+        outputs=preview_image,
+        queue=False
     )
 
 demo.queue(max_size=12).launch(share=False)
