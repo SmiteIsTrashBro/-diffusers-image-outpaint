@@ -453,4 +453,4 @@ with gr.Blocks(css=css) as demo:
         queue=False
     )
 
-demo.queue(max_size=12).launch(share=False)
+demo.queue(max_size=12).launch(share=False, ssr_mode=False)
