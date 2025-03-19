@@ -1,10 +1,10 @@
-torch
-spaces
+torch==2.5.1
+spaces==0.30.4
 gradio==4.42.0
 gradio-imageslider
 numpy==1.26.4
-transformers
-accelerate
-diffusers
+transformers==4.45.0
+accelerate==0.33.0
+diffusers==0.30.3
 fastapi<0.113.0
 opencv-python
