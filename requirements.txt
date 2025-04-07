@@ -1,4 +1,5 @@
 torch==2.5.1
+torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 spaces==0.30.4
 gradio==4.42.0
 gradio-imageslider
@@ -8,3 +9,4 @@ accelerate==0.33.0
 diffusers==0.30.3
 fastapi<0.113.0
 opencv-python
+websocket
